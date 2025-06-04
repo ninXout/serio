@@ -12,7 +12,8 @@
     "lint": "npm run lint:prettier && npm run lint:eslint",
     "test": "jest",
     "prepack": "npm run lint && npm run build && npm test && rm -r ./dist/tests",
-    "prepublishOnly": "./src/tests/package-test.sh"
+    "prepublishOnly": "./src/tests/package-test.sh",
+    "prepare": "npm run build"
   },
   "repository": {
     "type": "git",
