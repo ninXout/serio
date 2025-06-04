@@ -89,7 +89,6 @@ export class SArray<ValueT extends Serializable> extends SerializableWrapper<
 
   /** Create a new instance of this wrapper class from a raw value. */
   static of<ValueT extends Serializable, SArrayT extends SArray<ValueT>>(
-    this: new () => SArrayT,
     value: Array<ValueT>
   ): SArrayT;
   /** Returns an SArrayWithWrapper class that wraps elements with the provided
