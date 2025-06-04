@@ -65,7 +65,7 @@ export class SInt32BE extends createSerializableScalarWrapperClass<number>({
 }) {}
 
 /** Serializable wrapper for an unsigned 32-bit integer with big endian encoding. */
-export class SUInt32LE extends createSerializableScalarWrapperClass({
+export class SUInt32LE extends createSerializableScalarWrapperClass<number>({
   readFn: Buffer.prototype.readUInt32LE,
   writeFn: Buffer.prototype.writeUInt32LE,
   serializedLength: 4,
@@ -77,6 +77,70 @@ export class SInt32LE extends createSerializableScalarWrapperClass<number>({
   readFn: Buffer.prototype.readInt32LE,
   writeFn: Buffer.prototype.writeInt32LE,
   serializedLength: 4,
+  defaultValue: 0,
+}) {}
+
+/** Serializable wrapper for an unsigned 64-bit integer with big endian encoding. */
+export class SUInt64BE extends createSerializableScalarWrapperClass<number>({
+  readFn: Buffer.prototype.readUInt64BE,
+  writeFn: Buffer.prototype.writeUInt64BE,
+  serializedLength: 8,
+  defaultValue: 0,
+}) {}
+
+/** Serializable wrapper for a signed 64-bit integer with big endian encoding. */
+export class SInt64BE extends createSerializableScalarWrapperClass<number>({
+  readFn: Buffer.prototype.readInt64BE,
+  writeFn: Buffer.prototype.writeInt64BE,
+  serializedLength: 8,
+  defaultValue: 0,
+}) {}
+
+/** Serializable wrapper for an unsigned 64-bit integer with little endian encoding. */
+export class SUInt64LE extends createSerializableScalarWrapperClass<number>({
+  readFn: Buffer.prototype.readUInt64LE,
+  writeFn: Buffer.prototype.writeUInt64LE,
+  serializedLength: 8,
+  defaultValue: 0,
+}) {}
+
+/** Serializable wrapper for a signed 64-bit integer with little endian encoding. */
+export class SInt64LE extends createSerializableScalarWrapperClass<number>({
+  readFn: Buffer.prototype.readInt64LE,
+  writeFn: Buffer.prototype.writeInt64LE,
+  serializedLength: 8,
+  defaultValue: 0,
+}) {}
+
+/** Serializable wrapper for a signed 32-bit float with big endian encoding. */
+export class SFloat32BE extends createSerializableScalarWrapperClass<number>({
+  readFn: Buffer.prototype.readFloatBE,
+  writeFn: Buffer.prototype.writeFloatBE,
+  serializedLength: 4,
+  defaultValue: 0,
+}) {}
+
+/** Serializable wrapper for a signed 32-bit float with little endian encoding. */
+export class SFloat32LE extends createSerializableScalarWrapperClass<number>({
+  readFn: Buffer.prototype.readFloatLE,
+  writeFn: Buffer.prototype.writeFloatLE,
+  serializedLength: 4,
+  defaultValue: 0,
+}) {}
+
+/** Serializable wrapper for a signed 64-bit float with big endian encoding. */
+export class SFloat64BE extends createSerializableScalarWrapperClass<number>({
+  readFn: Buffer.prototype.readDoubleBE,
+  writeFn: Buffer.prototype.writeDoubleBE,
+  serializedLength: 8,
+  defaultValue: 0,
+}) {}
+
+/** Serializable wrapper for a signed 64-bit float with little endian encoding. */
+export class SFloat64LE extends createSerializableScalarWrapperClass<number>({
+  readFn: Buffer.prototype.readDoubleLE,
+  writeFn: Buffer.prototype.writeDoubleLE,
+  serializedLength: 8,
   defaultValue: 0,
 }) {}
 
