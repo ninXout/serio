@@ -61,8 +61,11 @@ export class SString extends SerializableWrapper<string> {
   deserialize(buffer: Buffer, opts?: DeserializeOptions): number {
     if (this.length) {
       buffer = buffer.subarray(0, this.length);
+      this.value = decodeString(buffer, opts);
+    } else {
+      this.length = buffer.readUInt16LE(0)
+      this.value = decodeString(buffer.subarray(2, this.length), opts);
     }
-    this.value = decodeString(buffer, opts);
     return buffer.length;
   }
 
