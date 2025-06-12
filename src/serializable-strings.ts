@@ -64,7 +64,8 @@ export class SString extends SerializableWrapper<string> {
       this.value = decodeString(buffer, opts);
     } else {
       this.length = buffer.readUInt16LE(0)
-      this.value = decodeString(buffer.subarray(2, this.length), opts);
+      buffer = buffer.subarray(2, buffer.length)
+      this.value = decodeString(buffer, opts);
     }
     return buffer.length;
   }
