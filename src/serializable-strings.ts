@@ -118,9 +118,11 @@ export class SStringSTL extends SerializableWrapper<string> {
     let writer: SmartBuffer;
     if (this.length) {
       writer = SmartBuffer.fromBuffer(Buffer.alloc(this.length));
+      writer.writeUInt16LE(this.length)
       writer.writeBuffer(encodedValue.subarray(0, this.length));
     } else {
       writer = new SmartBuffer();
+      writer.writeUInt16LE(encodedValue.length)
       writer.writeBuffer(encodedValue);
     }
     return writer.toBuffer();
