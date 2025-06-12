@@ -64,7 +64,7 @@ export class SInt32BE extends createSerializableScalarWrapperClass<number>({
   defaultValue: 0,
 }) {}
 
-/** Serializable wrapper for an unsigned 32-bit integer with big endian encoding. */
+/** Serializable wrapper for an unsigned 32-bit integer with little endian encoding. */
 export class SUInt32LE extends createSerializableScalarWrapperClass<number>({
   readFn: Buffer.prototype.readUInt32LE,
   writeFn: Buffer.prototype.writeUInt32LE,
@@ -72,7 +72,7 @@ export class SUInt32LE extends createSerializableScalarWrapperClass<number>({
   defaultValue: 0,
 }) {}
 
-/** Serializable wrapper for a signed 32-bit integer with big endian encoding. */
+/** Serializable wrapper for a signed 32-bit integer with little endian encoding. */
 export class SInt32LE extends createSerializableScalarWrapperClass<number>({
   readFn: Buffer.prototype.readInt32LE,
   writeFn: Buffer.prototype.writeInt32LE,
