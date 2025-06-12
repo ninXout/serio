@@ -106,11 +106,11 @@ export class SStringSTL extends SerializableWrapper<string> {
     } else {
       this.length = buffer.readUInt16LE(0)
       console.log(`Length is ${this.length}`)
-      buffer = buffer.subarray(2, this.length);
+      buffer = buffer.subarray(2, 2 + this.length);
       console.log(`New Buffer Length is ${buffer.toString('hex')} (${buffer.length})`)
     }
     this.value = decodeString(buffer, opts);
-    return buffer.length;
+    return 2 + buffer.length;
   }
 
   serialize(opts?: SerializeOptions): Buffer {
