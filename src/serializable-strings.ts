@@ -117,13 +117,14 @@ export class SStringSTL extends SerializableWrapper<string> {
     const encodedValue = encodeString(this.value, opts);
     let writer: SmartBuffer;
     if (this.length) {
-      writer = SmartBuffer.fromBuffer(Buffer.alloc(this.length));
+      writer = SmartBuffer.fromBuffer(Buffer.alloc(this.length + 2));
       writer.writeUInt16LE(this.length)
       writer.writeBuffer(encodedValue.subarray(0, this.length));
     } else {
       writer = new SmartBuffer();
       writer.writeUInt16LE(encodedValue.length)
       writer.writeBuffer(encodedValue);
+      console.log(`String is ${this.value} (${this.value.length}) and ${writer.toBuffer().toString('hex')}`)
     }
     return writer.toBuffer();
   }
