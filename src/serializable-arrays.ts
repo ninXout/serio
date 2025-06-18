@@ -6,6 +6,108 @@ import {
 import {SerializableWrapper} from './serializable-wrapper';
 import {canAssignJSON, toJSON} from './utils';
 
+/** A Serializable that represents a dynamically sized array with binary-encoded length. */
+export class SVector<ValueT extends Serializable> extends SerializableWrapper<
+  Array<ValueT>
+> {
+  /** Array of Serializables. */
+  value: Array<ValueT> = [];
+  /** Element constructor in fixed size SVectors. */
+  readonly elementType?: new () => ValueT;
+
+  deserialize(buffer: Buffer, opts?: DeserializeOptions): number {
+    let offset = 0;
+
+    const length = buffer.readUInt16LE(offset);
+    offset += 2;
+
+    this.value = Array(length)
+      .fill(0)
+      .map(() => new this.elementType!());
+
+    for (let i = 0; i < length; i++) {
+      offset += this.value[i].deserialize(buffer.subarray(offset), opts);
+    }
+
+    return offset;
+  }
+
+  serialize(opts?: SerializeOptions): Buffer {
+    const serializedElements = this.value.map((element) =>
+      element.serialize(opts)
+    );
+    const lengthBuffer = Buffer.alloc(2);
+    lengthBuffer.writeUInt16LE(this.value.length, 0);
+
+    return Buffer.concat([lengthBuffer, ...serializedElements]);
+  }
+
+  getSerializedLength(opts?: SerializeOptions): number {
+    return (
+      2 + // compensating for length
+      this.value.reduce(
+        (sum, element) => sum + element.getSerializedLength(opts),
+        0
+      )
+    );
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  toJSON(): any {
+    return this.value.map(toJSON);
+  }
+
+  /** Assigns elements from a JSON array.
+   *
+   * Conceptually equivalent to assigning to this.values directly, but
+   * recursively hydrates SObjects / SArrays / SerializableWrappers etc and
+   * invokes their assignJSON() to process JSON values.
+   */
+  assignJSON(jsonValues: Array<unknown>) {
+    if (!Array.isArray(jsonValues)) {
+      throw new Error(
+        `Expected array in SVector.assignJSON(), got ${typeof jsonValues}`
+      );
+    }
+
+    // Resize the value array to match the JSON input.
+    if (jsonValues.length < this.value.length) {
+      this.value.length = jsonValues.length;
+    } else if (jsonValues.length > this.value.length) {
+      this.value.push(
+        ...Array(jsonValues.length - this.value.length)
+          .fill(0)
+          .map(() => new this.elementType!())
+      );
+    }
+
+    for (let i = 0; i < jsonValues.length; i++) {
+      const element = this.value[i];
+      if (!canAssignJSON(element)) {
+        throw new Error(
+          `${element.constructor.name} does not support assignJSON`
+        );
+      }
+      element.assignJSON(jsonValues[i]);
+    }
+  }
+
+  /** Create a new instance of this wrapper class from a raw value. */
+  static ofJSON<
+    ValueT extends Serializable,
+    SVectorT extends SVector<ValueT>,
+  >(
+    this: new (elementType: new () => ValueT) => SVectorT,
+    elementType: new () => ValueT,
+    jsonValues: Array<unknown>
+  ): SVectorT {
+    const instance = new this(elementType);
+    instance.assignJSON(jsonValues);
+    return instance;
+  }
+}
+
+
 /** A Serializable that represents a concatenation of other Serializables. */
 export class SArray<ValueT extends Serializable> extends SerializableWrapper<
   Array<ValueT>
