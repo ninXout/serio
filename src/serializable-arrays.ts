@@ -6,6 +6,86 @@ import {
 import {SerializableWrapper} from './serializable-wrapper';
 import {canAssignJSON, toJSON} from './utils';
 
+/** A Serializable that represents a 2-element tuple. */
+export class SPair<ValueF extends Serializable, ValueS extends Serializable> extends SerializableWrapper<
+  [ValueF, ValueS]
+> {
+  /** Array of Serializables. */
+  value: [ValueF, ValueS] = [null as any, null as any];
+  /** Element constructor in fixed size SVectors. */
+  readonly elementType?: new () => [ValueF, ValueS];
+
+  deserialize(buffer: Buffer, opts?: DeserializeOptions): number {
+    let offset = 0;
+
+    this.value.forEach((value) => {
+      offset += value.deserialize(buffer.subarray(offset), opts)
+    })
+
+    return offset;
+  }
+
+  serialize(opts?: SerializeOptions): Buffer {
+    const serializedElements = this.value.map((element) =>
+      element.serialize(opts)
+    );
+
+    return Buffer.concat([...serializedElements]);
+  }
+
+  getSerializedLength(opts?: SerializeOptions): number {
+    return (
+      this.value.reduce(
+        (sum, element) => sum + element.getSerializedLength(opts),
+        0
+      )
+    );
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  toJSON(): any {
+    return this.value.map(toJSON);
+  }
+
+  /** Assigns elements from a JSON array.
+   *
+   * Conceptually equivalent to assigning to this.values directly, but
+   * recursively hydrates SObjects / SArrays / SerializableWrappers etc and
+   * invokes their assignJSON() to process JSON values.
+   */
+  assignJSON(jsonValues: [unknown, unknown]) {
+    if (!Array.isArray(jsonValues)) {
+      throw new Error(
+        `Expected pair in SPair.assignJSON(), got ${typeof jsonValues}`
+      );
+    }
+
+    this.value.forEach((value, index) => {
+      if (!canAssignJSON(value)) {
+        throw new Error(`${value.constructor.name} does not support assignJSON`);
+      }
+
+      value.assignJSON(jsonValues[index]);
+    })
+  }
+
+  /** Create a new instance of this wrapper class from a raw value. */
+  static ofJSON<
+    FirstT extends Serializable,
+    SecondT extends Serializable,
+    SPairT extends SPair<FirstT, SecondT>,
+  >(
+    this: new (firstType: new () => FirstT, secondType: new () => SecondT) => SPairT,
+    firstType: new () => FirstT,
+    secondType: new () => SecondT,
+    jsonValues: [unknown, unknown]
+  ): SPairT {
+    const instance = new this(firstType, secondType);
+    instance.assignJSON(jsonValues);
+    return instance;
+  }
+}
+
 /** A Serializable that represents a dynamically sized array with binary-encoded length. */
 export class SVector<ValueT extends Serializable> extends SerializableWrapper<
   Array<ValueT>
@@ -106,7 +186,6 @@ export class SVector<ValueT extends Serializable> extends SerializableWrapper<
     return instance;
   }
 }
-
 
 /** A Serializable that represents a concatenation of other Serializables. */
 export class SArray<ValueT extends Serializable> extends SerializableWrapper<
