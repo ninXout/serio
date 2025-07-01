@@ -68,9 +68,9 @@ export class SPair<
   ): SPairT;
   /** Returns an SArrayWithWrapper class that wraps elements with the provided
    * SerializableWrapper. */
-  static of<ValueT>( // I don't really know how this func impl works and why its necessary i hope i can ignore it
-    wrapperType: new () => SerializableWrapper<ValueT>
-  ): ReturnType<typeof createSArrayWithWrapperClass<ValueT>>;
+  static of<ValueK extends Serializable, ValueV extends Serializable>( // I don't really know how this func impl works and why its necessary i hope i can ignore it
+    wrapperType: new () => SerializableWrapper<[ValueK, ValueV]>
+  ): SPair<ValueK, ValueV>;
   static of<ValueK, ValueV>(
     arg: [ValueK, ValueV] | (new () => SerializableWrapper<[ValueK, ValueV]>)
   ) {
