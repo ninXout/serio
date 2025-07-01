@@ -6,127 +6,130 @@ import {
 import {SerializableWrapper} from './serializable-wrapper';
 import {canAssignJSON, toJSON} from './utils';
 
-/** A Serializable that represents a 2-element tuple. */
-export class SPair<ValueF extends Serializable, ValueS extends Serializable> extends SerializableWrapper<
-  [ValueF, ValueS]
-> {
-  /** Array of Serializables. */
-  value: [ValueF, ValueS] = [null as any, null as any];
-  /** Element constructor in fixed size SVectors. */
-  readonly elementType?: new () => [ValueF, ValueS];
+/** A Serializable that represents a pair of other Serializables. */
+export class SPair<
+  ValueK extends Serializable,
+  ValueV extends Serializable
+> extends SerializableWrapper<[ValueK, ValueV]> {
+  /** Serializable Thing IDK. */
+  value: [ValueK, ValueV] = [null as any, null as any]; // not a big fan of this default but i dont think i have many options :sob:
+
+  /** Type constructor. */
+  readonly elementType?: new () => [ValueK, ValueV];
 
   deserialize(buffer: Buffer, opts?: DeserializeOptions): number {
     let offset = 0;
-
-    this.value.forEach((value) => {
-      offset += value.deserialize(buffer.subarray(offset), opts)
-    })
-
+    offset += this.value[0].deserialize(buffer.subarray(offset), opts);
+    offset += this.value[1].deserialize(buffer.subarray(offset), opts);
     return offset;
   }
 
   serialize(opts?: SerializeOptions): Buffer {
-    const serializedElements = this.value.map((element) =>
-      element.serialize(opts)
-    );
-
-    return Buffer.concat([...serializedElements]);
+    return Buffer.concat([
+      this.value[0].serialize(opts),
+      this.value[1].serialize(opts),
+    ]);
   }
 
   getSerializedLength(opts?: SerializeOptions): number {
     return (
-      this.value.reduce(
-        (sum, element) => sum + element.getSerializedLength(opts),
-        0
-      )
+      this.value[0].getSerializedLength(opts) + 
+      this.value[1].getSerializedLength(opts)
     );
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   toJSON(): any {
-    return this.value.map(toJSON);
+    return [toJSON(this.value[0]), toJSON(this.value[1])];
   }
 
-  /** Assigns elements from a JSON array.
-   *
-   * Conceptually equivalent to assigning to this.values directly, but
-   * recursively hydrates SObjects / SArrays / SerializableWrappers etc and
-   * invokes their assignJSON() to process JSON values.
-   */
-  assignJSON(jsonValues: [unknown, unknown]) {
-    if (!Array.isArray(jsonValues)) {
+  /** Assigns key and value from a JSON array of 2 elements. */
+  assignJSON(json: unknown): void {
+    if (!Array.isArray(json) || json.length !== 2) {
       throw new Error(
-        `Expected pair in SPair.assignJSON(), got ${typeof jsonValues}`
+        `Expected [key, value] array in SPair.assignJSON(), got: ${JSON.stringify(
+          json
+        )}`
       );
     }
-
-    this.value.forEach((value, index) => {
-      if (!canAssignJSON(value)) {
-        throw new Error(`${value.constructor.name} does not support assignJSON`);
-      }
-
-      value.assignJSON(jsonValues[index]);
-    })
+    if (!canAssignJSON(this.value[0])) {
+      throw new Error(`${this.value[0].constructor.name} does not support assignJSON`);
+    }
+    if (!canAssignJSON(this.value[1])) {
+      throw new Error(`${this.value[1].constructor.name} does not support assignJSON`);
+    }
+    this.value[0].assignJSON(json[0]);
+    this.value[1].assignJSON(json[1]);
   }
 
   /** Create a new instance of this wrapper class from a raw value. */
-  static ofJSON<
-    FirstT extends Serializable,
-    SecondT extends Serializable,
-    SPairT extends SPair<FirstT, SecondT>,
-  >(
-    this: new (firstType: new () => FirstT, secondType: new () => SecondT) => SPairT,
-    firstType: new () => FirstT,
-    secondType: new () => SecondT,
-    jsonValues: [unknown, unknown]
-  ): SPairT {
-    const instance = new this(firstType, secondType);
-    instance.assignJSON(jsonValues);
-    return instance;
+  static of<ValueK extends Serializable, ValueV extends Serializable, SPairT extends SPair<ValueK, ValueV>>(
+    value: [ValueK, ValueV]
+  ): SPairT;
+  /** Returns an SArrayWithWrapper class that wraps elements with the provided
+   * SerializableWrapper. */
+  static of<ValueT>( // I don't really know how this func impl works and why its necessary i hope i can ignore it
+    wrapperType: new () => SerializableWrapper<ValueT>
+  ): ReturnType<typeof createSArrayWithWrapperClass<ValueT>>;
+  static of<ValueK, ValueV>(
+    arg: [ValueK, ValueV] | (new () => SerializableWrapper<[ValueK, ValueV]>)
+  ) {
+    return super.of(arg); // i'm going to hope that i can guarantee these values because i really dont know how to properly check this
+    if (
+      typeof arg === 'function' &&
+      arg.prototype instanceof SerializableWrapper
+    ) {
+      return createSArrayWithWrapperClass<ValueT>(arg);
+    }
+    throw new Error(
+      'SArray.of() should be invoked either with an array of Serializable ' +
+        'values or a SerializableWrapper constructor'
+    );
   }
 }
 
-/** A Serializable that represents a dynamically sized array with binary-encoded length. */
+
+/** A Serializable that represents a dynamically sized vector of other Serializables. */
 export class SVector<ValueT extends Serializable> extends SerializableWrapper<
   Array<ValueT>
 > {
   /** Array of Serializables. */
   value: Array<ValueT> = [];
-  /** Element constructor in fixed size SVectors. */
+
+  /** Element constructor used to hydrate elements during deserialization or assignJSON. */
   readonly elementType?: new () => ValueT;
 
   deserialize(buffer: Buffer, opts?: DeserializeOptions): number {
     let offset = 0;
-
-    const length = buffer.readUInt16LE(offset);
+    const length = buffer.readUint16LE(offset);
     offset += 2;
 
     this.value = Array(length)
       .fill(0)
-      .map(() => new this.elementType!());
-
-    for (let i = 0; i < length; i++) {
-      offset += this.value[i].deserialize(buffer.subarray(offset), opts);
-    }
+      .map(() => {
+        if (!this.elementType) {
+          throw new Error(`SVector.deserialize missing elementType`);
+        }
+        const element = new this.elementType();
+        offset += element.deserialize(buffer.subarray(offset), opts);
+        return element;
+      });
 
     return offset;
   }
 
   serialize(opts?: SerializeOptions): Buffer {
-    const serializedElements = this.value.map((element) =>
-      element.serialize(opts)
-    );
-    const lengthBuffer = Buffer.alloc(2);
-    lengthBuffer.writeUInt16LE(this.value.length, 0);
-
-    return Buffer.concat([lengthBuffer, ...serializedElements]);
+    const lengthBuf = Buffer.alloc(2); // i dont think this alloc has to happen but maybe it does idk
+    lengthBuf.writeUint16LE(this.value.length, 0);
+    const dataBufs = this.value.map((v) => v.serialize(opts));
+    return Buffer.concat([lengthBuf, ...dataBufs]);
   }
 
   getSerializedLength(opts?: SerializeOptions): number {
     return (
-      2 + // compensating for length
+      2 +
       this.value.reduce(
-        (sum, element) => sum + element.getSerializedLength(opts),
+        (sum, v) => sum + v.getSerializedLength(opts),
         0
       )
     );
@@ -139,53 +142,59 @@ export class SVector<ValueT extends Serializable> extends SerializableWrapper<
 
   /** Assigns elements from a JSON array.
    *
-   * Conceptually equivalent to assigning to this.values directly, but
-   * recursively hydrates SObjects / SArrays / SerializableWrappers etc and
-   * invokes their assignJSON() to process JSON values.
+   * Recursively hydrates each element using the provided element type.
    */
-  assignJSON(jsonValues: Array<unknown>) {
+  assignJSON(jsonValues: Array<unknown>): void {
     if (!Array.isArray(jsonValues)) {
       throw new Error(
         `Expected array in SVector.assignJSON(), got ${typeof jsonValues}`
       );
     }
 
-    // Resize the value array to match the JSON input.
-    if (jsonValues.length < this.value.length) {
-      this.value.length = jsonValues.length;
-    } else if (jsonValues.length > this.value.length) {
-      this.value.push(
-        ...Array(jsonValues.length - this.value.length)
-          .fill(0)
-          .map(() => new this.elementType!())
-      );
+    if (!this.elementType) {
+      throw new Error(`SVector.assignJSON missing elementType`);
     }
 
-    for (let i = 0; i < jsonValues.length; i++) {
-      const element = this.value[i];
+    this.value = jsonValues.map((json) => {
+      const element = new this.elementType!();
       if (!canAssignJSON(element)) {
         throw new Error(
           `${element.constructor.name} does not support assignJSON`
         );
       }
-      element.assignJSON(jsonValues[i]);
-    }
+      element.assignJSON(json);
+      return element;
+    });
   }
 
   /** Create a new instance of this wrapper class from a raw value. */
-  static ofJSON<
-    ValueT extends Serializable,
-    SVectorT extends SVector<ValueT>,
-  >(
-    this: new (elementType: new () => ValueT) => SVectorT,
-    elementType: new () => ValueT,
-    jsonValues: Array<unknown>
-  ): SVectorT {
-    const instance = new this(elementType);
-    instance.assignJSON(jsonValues);
-    return instance;
+  static of<ValueT extends Serializable, SVectorT extends SVector<ValueT>>(
+    value: Array<ValueT>
+  ): SVectorT;
+  /** Returns an SVectorWithWrapper class that wraps elements with the provided
+   * SerializableWrapper. */
+  static of<ValueT>(
+    wrapperType: new () => SerializableWrapper<ValueT>
+  ): ReturnType<typeof createSArrayWithWrapperClass<ValueT>>;
+  static of<ValueT>(
+    arg: Array<ValueT> | (new () => SerializableWrapper<ValueT>)
+  ) {
+    if (Array.isArray(arg)) {
+      return super.of(arg);
+    }
+    if (
+      typeof arg === 'function' &&
+      arg.prototype instanceof SerializableWrapper
+    ) {
+      return createSArrayWithWrapperClass<ValueT>(arg);
+    }
+    throw new Error(
+      'SVector.of() should be invoked either with an array of Serializable ' +
+        'values or a SerializableWrapper constructor'
+    );
   }
 }
+
 
 /** A Serializable that represents a concatenation of other Serializables. */
 export class SArray<ValueT extends Serializable> extends SerializableWrapper<
