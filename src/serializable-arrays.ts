@@ -75,7 +75,7 @@ export class SPair<
     arg: [ValueK, ValueV] | (new () => SerializableWrapper<[ValueK, ValueV]>)
   ) {
     return super.of(arg); // i'm going to hope that i can guarantee these values because i really dont know how to properly check this
-    if (
+    /*if (
       typeof arg === 'function' &&
       arg.prototype instanceof SerializableWrapper
     ) {
@@ -84,7 +84,7 @@ export class SPair<
     throw new Error(
       'SArray.of() should be invoked either with an array of Serializable ' +
         'values or a SerializableWrapper constructor'
-    );
+    );*/
   }
 }
 
