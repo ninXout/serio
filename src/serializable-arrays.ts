@@ -1,3 +1,4 @@
+import { SmartBuffer } from 'smart-buffer';
 import {
   DeserializeOptions,
   Serializable,
@@ -46,11 +47,7 @@ export class SPair<
   /** Assigns key and value from a JSON array of 2 elements. */
   assignJSON(json: unknown): void {
     if (!Array.isArray(json) || json.length !== 2) {
-      throw new Error(
-        `Expected [key, value] array in SPair.assignJSON(), got: ${JSON.stringify(
-          json
-        )}`
-      );
+      throw new Error(`Expected [key, value] array in SPair.assignJSON(), got: ${JSON.stringify(json)}`);
     }
     if (!canAssignJSON(this.value[0])) {
       throw new Error(`${this.value[0].constructor.name} does not support assignJSON`);
@@ -88,6 +85,199 @@ export class SPair<
   }
 }
 
+/** A Serializable that represents a dynamically sized vector of other Serializables. */
+export class SMap<ValueK extends Serializable, ValueV extends Serializable> extends SerializableWrapper<
+  Map<ValueK, ValueV>
+> {
+  /** Array of Serializables. */
+  value: Map<ValueK, ValueV> = new Map();
+
+  /** Element constructor used to hydrate elements during deserialization or assignJSON. */
+  readonly elementType?: new () => [ValueK, ValueV];
+
+  deserialize(buffer: Buffer, opts?: DeserializeOptions): number {
+    let offset = 0;
+    const length = buffer.readUint16LE(offset);
+    offset += 2;
+
+    if (!this.elementType) throw new Error(`SMap.deserialize missing elementType`);
+
+    for (let i = 0; i < length; i++) {
+      const key = new this.elementType();
+      offset += key[0].deserialize(buffer.subarray(offset), opts);
+      offset += key[1].deserialize(buffer.subarray(offset), opts);
+      this.value.set(key[0], key[1])
+    }
+
+    return offset;
+  }
+
+  serialize(opts?: SerializeOptions): Buffer {
+    const lengthBuf = Buffer.alloc(2); // i dont think this alloc has to happen but maybe it does idk
+    lengthBuf.writeUint16LE(this.value.size);
+    let dataBufs: Buffer<ArrayBufferLike> = Buffer.from('');
+    this.value.forEach((value, key) => { 
+      dataBufs = Buffer.concat([dataBufs, key.serialize(opts)])
+      dataBufs = Buffer.concat([dataBufs, value.serialize(opts)])
+    })
+    return Buffer.concat([lengthBuf, dataBufs]);
+  }
+
+  getSerializedLength(opts?: SerializeOptions): number {
+    let length = 0
+    this.value.forEach((value, key) => { 
+      length += key.getSerializedLength(opts)
+      length += value.getSerializedLength(opts)
+    })
+    return (
+      2 +
+      length
+    );
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  toJSON(): any { // sorryyy :P
+    return null;
+  }
+
+  /** Assigns elements from a JSON array.
+   *
+   * Recursively hydrates each element using the provided element type.
+   */
+  assignJSON(jsonValues: Map<unknown, unknown>): void {
+    if (!this.elementType) throw new Error(`SMap.deserialize missing elementType`);
+
+    jsonValues.forEach((value, key) => {
+      const keyObj = new this.elementType!();
+      if (!canAssignJSON(keyObj[0])) throw new Error(`${keyObj.constructor.name} does not support assignJSON`);
+      keyObj[0].assignJSON(key)
+      if (!canAssignJSON(keyObj[1])) throw new Error(`${keyObj.constructor.name} does not support assignJSON`);
+      keyObj[1].assignJSON(key)
+    })
+  }
+
+  /** Create a new instance of this wrapper class from a raw value. */
+  static of<ValueK extends Serializable, ValueV extends Serializable, SMapT extends SMap<ValueK, ValueV>>(
+    value: Map<ValueK, ValueV>
+  ): SMapT;
+  /** Returns an SMapWithWrapper class that wraps elements with the provided
+   * SerializableWrapper. */
+  static of<ValueK, ValueV>(
+    wrapperType: new () => SerializableWrapper<[ValueK, ValueV]>
+  ): ReturnType<typeof createSMapWithWrapperClass<ValueK, ValueV>>;
+  static of<ValueK, ValueV>(
+    arg: Map<ValueK, ValueV> | (new () => SerializableWrapper<[ValueK, ValueV]>)
+  ) {
+    if (arg instanceof Map) {
+      return super.of(arg);
+    }
+
+    if (
+      typeof arg === 'function' &&
+      arg.prototype instanceof SerializableWrapper
+    ) {
+      return createSMapWithWrapperClass<ValueK, ValueV>(arg);
+    }
+    throw new Error(
+      'SMap.of() should be invoked either with an array of Serializable ' +
+        'values or a SerializableWrapper constructor'
+    );
+  }
+}
+
+/** Returns an SMapWithWrapperClass child class with the given parameters. */
+function createSMapWithWrapperClass<ValueK, ValueV>(
+  wrapperType: new () => SerializableWrapper<[ValueK, ValueV]>
+) {
+  return class extends SMapWithWrapper<ValueK, ValueV> {
+    value = new Map<ValueK, ValueV>()
+    wrapperType = wrapperType;
+
+    /** Returns an SMapWithWrapper class that pads / truncates to the provided
+     * length.
+     */
+    static ofLength(length: number) {
+      return createSMapWithWrapperClass<ValueK, ValueV>(wrapperType);
+    }
+  };
+}
+
+/** SMap variant that wraps each element for serialization / deserialization.
+ */
+export abstract class SMapWithWrapper<ValueK, ValueV> extends SerializableWrapper<
+  Map<ValueK, ValueV>
+> {
+  /** Array of unwrapped values. */
+  value: Map<ValueK, ValueV> = new Map();
+  /** Wrapper type constructor. */
+  abstract readonly wrapperType: new () => SerializableWrapper<[ValueK, ValueV]>;
+
+  deserialize(buffer: Buffer, opts?: DeserializeOptions): number {
+    const array = this.toSMap();
+    const readOffset = array.deserialize(buffer, opts);
+    array.value.forEach(({value}) => {
+      this.value.set(value[0], value[1])
+    })
+    return readOffset;
+  }
+
+  serialize(opts?: SerializeOptions): Buffer {
+    return this.toSMap().serialize(opts);
+  }
+
+  getSerializedLength(opts?: SerializeOptions): number {
+    return this.toSMap().getSerializedLength(opts);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  toJSON(): any {
+    return this.toSMap().toJSON();
+  }
+
+  /** Assigns elements from a JSON array.
+   *
+   * JSON values are processed with wrapperType.assignJSON().
+   */
+  assignJSON(jsonValues: Map<unknown, unknown>) {
+    const array = this.toSMap();
+    if (array.value.length < jsonValues.size) {
+      array.value.push(
+        ...Array(jsonValues.size - array.value.length)
+          .fill(0)
+          .map(() => new this.wrapperType())
+      );
+    }
+    let arr: Array<unknown> = []
+    jsonValues.forEach((value, key) => {
+      arr.push([key, value])
+    })
+    array.assignJSON(arr);
+    array.value.forEach(({value}) => {
+      this.value.set(value[0], value[1])
+    })
+  }
+
+  /**  Constructs an SMap of wrappers around the current array of elements. */
+  toSMap() {
+    let arr: Array<SerializableWrapper<[ValueK, ValueV]>> = []
+    this.value.forEach((value, key) => {
+      const wrapper = new this.wrapperType();
+      wrapper.value = [key, value];
+      return wrapper;
+    })
+    return SArray.of(arr);
+  }
+
+  /** Create a new instance of this wrapper class from a raw value. */
+  static ofJSON<ValueK, ValueV, SMapT extends SMapWithWrapper<ValueK, ValueV>>(
+    this: new () => SMapT,
+    jsonValues: Map<unknown, unknown>
+  ): SMapT {
+    const instance = new this();
+    instance.assignJSON(jsonValues);
+    return instance;
+  }
+}
 
 /** A Serializable that represents a dynamically sized vector of other Serializables. */
 export class SVector<ValueT extends Serializable> extends SerializableWrapper<
