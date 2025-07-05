@@ -8,7 +8,7 @@ import {SerializableWrapper} from './serializable-wrapper';
 import {canAssignJSON, toJSON} from './utils';
 import { SUInt16LE } from './serializable-scalars';
 
-type Pair<Key, Value> = [Key, Value];
+export type Pair<Key, Value> = [Key, Value];
 
 /** A Serializable that represents a pair of other Serializables. */
 export class SPair<
