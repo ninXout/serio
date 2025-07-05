@@ -6,17 +6,20 @@ import {
 } from './serializable';
 import {SerializableWrapper} from './serializable-wrapper';
 import {canAssignJSON, toJSON} from './utils';
+import { SUInt16LE } from './serializable-scalars';
+
+type Pair<Key, Value> = [Key, Value];
 
 /** A Serializable that represents a pair of other Serializables. */
 export class SPair<
   ValueK extends Serializable,
   ValueV extends Serializable
-> extends SerializableWrapper<[ValueK, ValueV]> {
+> extends SerializableWrapper<Pair<ValueK, ValueV>> {
   /** Serializable Thing IDK. */
-  value: [ValueK, ValueV] = [null as any, null as any]; // not a big fan of this default but i dont think i have many options :sob:
+  value: Pair<ValueK, ValueV> = [null as any, null as any]; // not a big fan of this default but i dont think i have many options :sob:
 
   /** Type constructor. */
-  readonly elementType?: new () => [ValueK, ValueV];
+  readonly elementType?: new () => Pair<ValueK, ValueV>;
 
   deserialize(buffer: Buffer, opts?: DeserializeOptions): number {
     let offset = 0;
@@ -61,27 +64,30 @@ export class SPair<
 
   /** Create a new instance of this wrapper class from a raw value. */
   static of<ValueK extends Serializable, ValueV extends Serializable, SPairT extends SPair<ValueK, ValueV>>(
-    value: [ValueK, ValueV]
+    value: Pair<ValueK, ValueV>
   ): SPairT;
   /** Returns an SArrayWithWrapper class that wraps elements with the provided
    * SerializableWrapper. */
   static of<ValueK extends Serializable, ValueV extends Serializable>( // I don't really know how this func impl works and why its necessary i hope i can ignore it
-    wrapperType: new () => SerializableWrapper<[ValueK, ValueV]>
+    wrapperType: new () => SerializableWrapper<Pair<ValueK, ValueV>>
   ): SPair<ValueK, ValueV>;
   static of<ValueK, ValueV>(
-    arg: [ValueK, ValueV] | (new () => SerializableWrapper<[ValueK, ValueV]>)
+    arg: Pair<ValueK, ValueV> | (new () => SerializableWrapper<Pair<ValueK, ValueV>>)
   ) {
-    return super.of(arg); // i'm going to hope that i can guarantee these values because i really dont know how to properly check this
-    /*if (
+    if (Array.isArray(arg)) {
+      return super.of(arg);
+    }
+    
+    if (
       typeof arg === 'function' &&
       arg.prototype instanceof SerializableWrapper
     ) {
-      return createSArrayWithWrapperClass<ValueT>(arg);
+      return createSArrayWithWrapperClass<Pair<ValueK, ValueV>>(arg);
     }
     throw new Error(
       'SArray.of() should be invoked either with an array of Serializable ' +
         'values or a SerializableWrapper constructor'
-    );*/
+    );
   }
 }
 
@@ -152,7 +158,7 @@ export class SMap<ValueK extends Serializable, ValueV extends Serializable> exte
       if (!canAssignJSON(keyObj[0])) throw new Error(`${keyObj.constructor.name} does not support assignJSON`);
       keyObj[0].assignJSON(key)
       if (!canAssignJSON(keyObj[1])) throw new Error(`${keyObj.constructor.name} does not support assignJSON`);
-      keyObj[1].assignJSON(key)
+      keyObj[1].assignJSON(value)
     })
   }
 
@@ -171,7 +177,6 @@ export class SMap<ValueK extends Serializable, ValueV extends Serializable> exte
     if (arg instanceof Map) {
       return super.of(arg);
     }
-
     if (
       typeof arg === 'function' &&
       arg.prototype instanceof SerializableWrapper
