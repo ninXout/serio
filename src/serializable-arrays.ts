@@ -4,7 +4,7 @@ import {
   Serializable,
   SerializeOptions,
 } from './serializable';
-import {SerializableWrapper} from './serializable-wrapper';
+import {SerializableWrapper, SerializableWrapperKV} from './serializable-wrapper';
 import {canAssignJSON, toJSON} from './utils';
 import { SUInt16LE } from './serializable-scalars';
 
@@ -14,12 +14,10 @@ export type Pair<Key, Value> = [Key, Value];
 export class SPair<
   ValueK extends Serializable,
   ValueV extends Serializable
-> extends SerializableWrapper<Pair<ValueK, ValueV>> {
-  /** Serializable Thing IDK. */
-  value: Pair<ValueK, ValueV> = [null as any, null as any]; // not a big fan of this default but i dont think i have many options :sob:
-
+> extends SerializableWrapperKV<ValueK, ValueV> {
+  value: [ValueK, ValueV] = [null as any, null as any];
   /** Type constructor. */
-  readonly elementType?: new () => Pair<ValueK, ValueV>;
+  readonly elementType?: new () => [ValueK, ValueV];
 
   deserialize(buffer: Buffer, opts?: DeserializeOptions): number {
     let offset = 0;
@@ -41,25 +39,17 @@ export class SPair<
       this.value[1].getSerializedLength(opts)
     );
   }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  toJSON(): any {
-    return [toJSON(this.value[0]), toJSON(this.value[1])];
-  }
-
+  
   /** Assigns key and value from a JSON array of 2 elements. */
-  assignJSON(json: unknown): void {
-    if (!Array.isArray(json) || json.length !== 2) {
-      throw new Error(`Expected [key, value] array in SPair.assignJSON(), got: ${JSON.stringify(json)}`);
-    }
+  assignJSON<JsonValueK extends ValueK, JsonValueV extends ValueV>(jsonKey: JsonValueK, jsonValue: JsonValueV): void {
     if (!canAssignJSON(this.value[0])) {
       throw new Error(`${this.value[0].constructor.name} does not support assignJSON`);
     }
     if (!canAssignJSON(this.value[1])) {
       throw new Error(`${this.value[1].constructor.name} does not support assignJSON`);
     }
-    this.value[0].assignJSON(json[0]);
-    this.value[1].assignJSON(json[1]);
+    this.value[0].assignJSON(jsonKey);
+    this.value[1].assignJSON(jsonValue);
   }
 
   /** Create a new instance of this wrapper class from a raw value. */
@@ -69,10 +59,10 @@ export class SPair<
   /** Returns an SArrayWithWrapper class that wraps elements with the provided
    * SerializableWrapper. */
   static of<ValueK extends Serializable, ValueV extends Serializable>( // I don't really know how this func impl works and why its necessary i hope i can ignore it
-    wrapperType: new () => SerializableWrapper<Pair<ValueK, ValueV>>
+    wrapperType: new () => SerializableWrapperKV<ValueK, ValueV>
   ): SPair<ValueK, ValueV>;
-  static of<ValueK, ValueV>(
-    arg: Pair<ValueK, ValueV> | (new () => SerializableWrapper<Pair<ValueK, ValueV>>)
+  static of<ValueK extends Serializable, ValueV extends Serializable>(
+    arg: Pair<ValueK, ValueV> | (new () => SerializableWrapperKV<ValueK, ValueV>)
   ) {
     if (Array.isArray(arg)) {
       return super.of(arg);
@@ -82,13 +72,23 @@ export class SPair<
       typeof arg === 'function' &&
       arg.prototype instanceof SerializableWrapper
     ) {
-      return createSArrayWithWrapperClass<Pair<ValueK, ValueV>>(arg);
+      return createSPairWithWrapperClass<ValueK, ValueV>(arg);
     }
     throw new Error(
       'SArray.of() should be invoked either with an array of Serializable ' +
         'values or a SerializableWrapper constructor'
     );
   }
+}
+
+/** Returns an SArrayWithWrapperClass child class with the given parameters. */
+function createSPairWithWrapperClass<ValueK extends Serializable, ValueV extends Serializable>(
+  wrapperType: new () => SerializableWrapperKV<ValueK, ValueV>
+) {
+  return class extends SPair<ValueK, ValueV> {
+    value = new wrapperType().value
+    wrapperType = wrapperType;
+  };
 }
 
 /** A Serializable that represents a dynamically sized vector of other Serializables. */
