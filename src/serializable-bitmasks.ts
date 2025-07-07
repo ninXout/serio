@@ -48,7 +48,7 @@ export abstract class SBitmask extends SerializableWrapper<number> {
   get value() {
     const bitfields = getSBitfieldSpecs(this);
     const wrapper = new this.wrapperType();
-    validateLength(bitfields, wrapper.getSerializedLength());
+    validateLength(bitfields, wrapper.getSerializedLength().unwrap());
 
     wrapper.value = 0;
     let offset = 0;
