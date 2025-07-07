@@ -1,9 +1,10 @@
+import { Result } from 'ts-results';
 import {
   DeserializeOptions,
   Serializable,
   SerializeOptions,
 } from './serializable';
-import {SArray, SArrayError} from './serializable-arrays';
+import {SArray} from './serializable-arrays';
 import {
   getFieldOrWrapper,
   getFieldSpecMap,
@@ -17,11 +18,9 @@ import {canAssignJSON, toJSON} from './utils';
 
 /** Serializable record where fields are defined via `@field()`. */
 export class SObject extends Serializable {
-  deserialize(buffer: Buffer, opts?: DeserializeOptions): number {
+  deserialize(buffer: Buffer, opts?: DeserializeOptions): Result<number, string> {
     const array = toSArray(this);
-    const readOffset = wrapSArrayErrorAsSObjectError(this, () =>
-      array.deserialize(buffer, opts)
-    );
+    const readOffset = array.deserialize(buffer, opts)
     const fieldSpecs = getFieldSpecs(this);
     for (let i = 0; i < fieldSpecs.length; ++i) {
       const {propertyKey, wrapperType} = fieldSpecs[i];
@@ -34,16 +33,12 @@ export class SObject extends Serializable {
     return readOffset;
   }
 
-  serialize(opts?: SerializeOptions): Buffer {
-    return wrapSArrayErrorAsSObjectError(this, () =>
-      toSArray(this).serialize(opts)
-    );
+  serialize(opts?: SerializeOptions): Result<Buffer, string> {
+    return toSArray(this).serialize(opts)
   }
 
-  getSerializedLength(opts?: SerializeOptions): number {
-    return wrapSArrayErrorAsSObjectError(this, () =>
-      toSArray(this).getSerializedLength(opts)
-    );
+  getSerializedLength(opts?: SerializeOptions): Result<number, string> {
+    return toSArray(this).getSerializedLength(opts)
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -64,7 +59,7 @@ export class SObject extends Serializable {
               ),
             ];
           } catch (e) {
-            throw new SObjectError(propertyKey, e);
+            throw new Error(propertyKey);
           }
         })
     );
@@ -143,13 +138,10 @@ export class SObject extends Serializable {
         wrapper.value = (this as Record<string | symbol, unknown>)[propertyKey];
         if (!canAssignJSON(wrapper)) {
           // SerializableWrapper classes should always implement assignJSON.
-          throw new SObjectError(
-            propertyKey,
-            new Error(
-              // @ts-expect-error `wrapper` has type `never` here.
-              `Field wrapper class ${wrapper.constructor.name} does not support assignJSON`
-            )
-          );
+          new Error(
+            // @ts-expect-error `wrapper` has type `never` here.
+            `Field wrapper class ${wrapper.constructor.name} does not support assignJSON`
+          )
         }
         wrapper.assignJSON(jsonValue);
         (this as Record<string | symbol, unknown>)[propertyKey] = wrapper.value;
@@ -182,23 +174,18 @@ export class SObject extends Serializable {
     )) {
       const fieldSpec = fieldSpecMap[propertyKey];
       if (!fieldSpec) {
-        throw new SObjectError(
-          propertyKey,
-          new Error(`Unknown property ${propertyKey}`)
-        );
+        new Error(`Unknown property ${propertyKey}`)
       }
       if (fieldSpec.wrapperType) {
-        if (!(serializableValue instanceof SerializableWrapper)) {
-          throw new SObjectError(
-            propertyKey.toString(),
-            new Error(
-              `Expected SerializableWrapper in assignment, ` +
-                `got ${typeof serializableValue}`
-            )
-          );
+        if (serializableValue instanceof SerializableWrapper) {
+          (this as Record<string | symbol, unknown>)[propertyKey] =
+            serializableValue.value;
+        } else {
+          new Error(
+            `Expected SerializableWrapper in assignment, ` +
+              `got ${typeof serializableValue}`
+          )
         }
-        (this as Record<string | symbol, unknown>)[propertyKey] =
-          serializableValue.value;
       } else {
         (this as Record<string | symbol, unknown>)[propertyKey] =
           serializableValue;
@@ -214,42 +201,6 @@ function toSArray(targetInstance: SObject): SArray<Serializable> {
       getFieldOrWrapper(targetInstance, fieldSpec)
     )
   );
-}
-
-function wrapSArrayErrorAsSObjectError<ResultT>(
-  targetInstance: SObject,
-  fn: () => ResultT
-): ResultT {
-  try {
-    return fn();
-  } catch (e) {
-    if (e instanceof SArrayError) {
-      const propertyKey =
-        getFieldSpecs(targetInstance)[e.index].propertyKey.toString();
-      const cause = e.cause;
-      const e2 = new SObjectError(propertyKey, cause);
-      throw e2;
-    } else {
-      throw e;
-    }
-  }
-}
-
-/** Error augmented by SObject with property information. */
-export class SObjectError extends Error {
-  constructor(propertyKey: string, rawCause: unknown) {
-    const cause =
-      rawCause instanceof Error ? rawCause : new Error(String(rawCause));
-    super(`Error in field ${propertyKey}: ${cause.message}`);
-    Object.setPrototypeOf(this, SObjectError.prototype);
-    this.cause = cause;
-    this.propertyKey = propertyKey;
-    this.stack = cause.stack;
-  }
-  /** The original error. */
-  cause: Error;
-  /** The property that raised the error. */
-  propertyKey: string;
 }
 
 type SerializableFieldDecorator<ValueT> = {

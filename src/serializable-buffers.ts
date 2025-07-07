@@ -1,3 +1,4 @@
+import { Err, Ok, Result } from 'ts-results';
 import {DeserializeOptions, SerializeOptions} from './serializable';
 import {SerializableWrapper} from './serializable-wrapper';
 
@@ -5,18 +6,18 @@ import {SerializableWrapper} from './serializable-wrapper';
 export class SBuffer extends SerializableWrapper<Buffer> {
   value: Buffer = Buffer.alloc(0);
 
-  deserialize(buffer: Buffer) {
+  deserialize(buffer: Buffer): Result<number, string> {
     this.value = Buffer.alloc(buffer.length);
     buffer.copy(this.value);
-    return this.value.length;
+    return Ok(this.value.length);
   }
 
-  serialize() {
-    return this.value;
+  serialize(): Result<Buffer, string> {
+    return Ok(this.value);
   }
 
-  getSerializedLength() {
-    return this.value.length;
+  getSerializedLength(): Result<number, string> {
+    return Ok(this.value.length);
   }
 
   assignJSON(
@@ -50,22 +51,27 @@ export abstract class SDynamicBuffer<
   /** Length type, to be provided by child classes. */
   protected abstract lengthType: new () => LengthT;
 
-  deserialize(buffer: Buffer, opts?: DeserializeOptions): number {
+  deserialize(buffer: Buffer, opts?: DeserializeOptions) {
     const length = new this.lengthType();
     const readOffset = length.deserialize(buffer, opts);
-    this.value = buffer.subarray(readOffset, readOffset + length.value);
-    return readOffset + length.value;
+    if (readOffset.err) return Err(readOffset.val)
+    this.value = buffer.subarray(readOffset.val, readOffset.val + length.value);
+    return Ok(readOffset.val + length.value);
   }
 
   serialize(opts?: SerializeOptions) {
     const length = new this.lengthType();
     length.value = this.value.length;
-    return Buffer.concat([length.serialize(opts), this.value]);
+    const srl = length.serialize(opts)
+    if (srl.err) return Err(srl.val)
+    return Ok(Buffer.concat([srl.val, this.value]));
   }
 
   getSerializedLength(opts?: SerializeOptions) {
     const length = new this.lengthType();
     length.value = this.value.length;
-    return length.getSerializedLength(opts) + this.value.length;
+    const nl = length.getSerializedLength(opts)
+    if (nl.err) return Err(nl.val)
+    return Ok(nl.val + this.value.length);
   }
 }

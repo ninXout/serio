@@ -1,3 +1,5 @@
+import { Result } from "ts-results";
+
 /** Common options to Serializable.deserialize(). */
 export interface DeserializeOptions {
   /** Text encoding.
@@ -27,11 +29,11 @@ export abstract class Serializable {
    *
    * @returns Number of bytes read.
    */
-  abstract deserialize(buffer: Buffer, opts?: DeserializeOptions): number;
+  abstract deserialize(buffer: Buffer, opts?: DeserializeOptions): Result<number, string>;
   /** Serializes this value into a buffer. */
-  abstract serialize(opts?: SerializeOptions): Buffer;
+  abstract serialize(opts?: SerializeOptions): Result<Buffer, string>;
   /** Computes the serialized length of this value. */
-  abstract getSerializedLength(opts?: SerializeOptions): number;
+  abstract getSerializedLength(opts?: SerializeOptions): Result<number, string>;
 
   /** Creates a new instance of this value by deserializing from a buffer. */
   static from<T extends Serializable>(

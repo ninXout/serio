@@ -2,132 +2,30 @@ import iconv from 'iconv-lite';
 import {SmartBuffer} from 'smart-buffer';
 import {DeserializeOptions, SerializeOptions} from './serializable';
 import {SerializableWrapper} from './serializable-wrapper';
-
-/** Serializable wrapper class for null-terminated strings. */
-export class SStringNT extends SerializableWrapper<string> {
-  value: string = '';
-  /** Fixed serialized size, or undefined if dynamically sized. */
-  readonly length?: number;
-
-  deserialize(buffer: Buffer, opts?: DeserializeOptions): number {
-    let reader: SmartBuffer;
-    let readOffset: number;
-    if (this.length) {
-      reader = SmartBuffer.fromBuffer(buffer.subarray(0, this.length));
-      this.value = decodeString(reader.readBufferNT(), opts);
-      readOffset = reader.length;
-    } else {
-      reader = SmartBuffer.fromBuffer(buffer);
-      this.value = decodeString(reader.readBufferNT(), opts);
-      readOffset = reader.readOffset;
-    }
-    return readOffset;
-  }
-
-  serialize(opts?: SerializeOptions): Buffer {
-    const encodedValue = encodeString(this.value, opts);
-    let writer: SmartBuffer;
-    if (this.length) {
-      writer = SmartBuffer.fromBuffer(Buffer.alloc(this.length));
-      writer.writeBufferNT(encodedValue.subarray(0, this.length - 1));
-    } else {
-      writer = new SmartBuffer();
-      writer.writeBufferNT(encodedValue);
-    }
-    return writer.toBuffer();
-  }
-
-  getSerializedLength(opts?: SerializeOptions): number {
-    return this.length || encodeString(this.value, opts).length + 1;
-  }
-
-  /** Returns a SStringNT class that has a fixed serialized size. */
-  static ofLength(length: number) {
-    if (length < 0 || (length | 0) !== length) {
-      throw new Error(`Invalid length ${length}`);
-    }
-    return class extends SStringNT {
-      length = length;
-    };
-  }
-}
-
-/** Serializable wrapper class for non-null-terminated strings. */
-export class SString extends SerializableWrapper<string> {
-  value: string = '';
-  /** Fixed serialized size, or undefined if dynamically sized. */
-  length?: number;
-
-  deserialize(buffer: Buffer, opts?: DeserializeOptions): number {
-    if (this.length) {
-      buffer = buffer.subarray(0, this.length);
-    }
-    this.value = decodeString(buffer, opts);
-    return buffer.length;
-  }
-
-  serialize(opts?: SerializeOptions): Buffer {
-    const encodedValue = encodeString(this.value, opts);
-    let writer: SmartBuffer;
-    if (this.length) {
-      writer = SmartBuffer.fromBuffer(Buffer.alloc(this.length));
-      writer.writeBuffer(encodedValue.subarray(0, this.length));
-    } else {
-      writer = new SmartBuffer();
-      writer.writeBuffer(encodedValue);
-    }
-    return writer.toBuffer();
-  }
-
-  getSerializedLength(opts?: SerializeOptions): number {
-    return this.length || encodeString(this.value, opts).length;
-  }
-
-  /** Returns a SString class that has a fixed serialized size. */
-  static ofLength(length: number) {
-    if (length < 0 || (length | 0) !== length) {
-      throw new Error(`Invalid length ${length}`);
-    }
-    return class extends SString {
-      length = length;
-    };
-  }
-}
+import { Ok } from 'ts-results';
 
 /** Serializable wrapper class for size specified strings. */
-export class SStringSTL extends SerializableWrapper<string> {
+export class SString extends SerializableWrapper<string> {
   value: string = '';
-  /** Fixed serialized size, or undefined if dynamically sized. */
-  length?: number;
 
-  deserialize(buffer: Buffer, opts?: DeserializeOptions): number {
-    if (this.length) {
-      buffer = buffer.subarray(0, this.length);
-    } else {
-      this.length = buffer.readUInt16LE(0)
-      buffer = buffer.subarray(2, 2 + this.length);
-    }
+  deserialize(buffer: Buffer, opts?: DeserializeOptions) {
+    const length = buffer.readUInt16LE(0)
+    buffer = buffer.subarray(2, 2 + length);
     this.value = decodeString(buffer, opts);
-    return 2 + buffer.length;
+    return Ok(2 + buffer.length);
   }
 
-  serialize(opts?: SerializeOptions): Buffer {
+  serialize(opts?: SerializeOptions) {
     const encodedValue = encodeString(this.value, opts);
     let writer: SmartBuffer;
-    if (this.length) {
-      writer = SmartBuffer.fromBuffer(Buffer.alloc(this.length + 2));
-      writer.writeUInt16LE(this.length)
-      writer.writeBuffer(encodedValue.subarray(0, this.length));
-    } else {
-      writer = new SmartBuffer();
-      writer.writeUInt16LE(encodedValue.length)
-      writer.writeBuffer(encodedValue);
-    }
-    return writer.toBuffer();
+    writer = new SmartBuffer();
+    writer.writeUInt16LE(encodedValue.length)
+    writer.writeBuffer(encodedValue);
+    return Ok(writer.toBuffer());
   }
 
-  getSerializedLength(opts?: SerializeOptions): number {
-    return this.length || encodeString(this.value, opts).length;
+  getSerializedLength(opts?: SerializeOptions) {
+    return Ok(encodeString(this.value, opts).length);
   }
 }
 

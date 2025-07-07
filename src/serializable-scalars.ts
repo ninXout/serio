@@ -1,3 +1,4 @@
+import { Ok, Result } from 'ts-results';
 import {SerializableWrapper} from './serializable-wrapper';
 
 /** Serializable wrapper for an unsigned 8-bit integer. */
@@ -188,19 +189,19 @@ export function createSerializableScalarWrapperClass<ValueT extends number>({
       };
     }
 
-    deserialize(buffer: Buffer) {
+    deserialize(buffer: Buffer): Result<number, string> {
       this.value = readFn.call(buffer);
-      return serializedLength;
+      return Ok(serializedLength);
     }
 
-    serialize() {
+    serialize(): Result<Buffer, string> {
       const buffer = Buffer.alloc(serializedLength);
       writeFn.call(buffer, this.value);
-      return buffer;
+      return Ok(buffer);
     }
 
-    getSerializedLength() {
-      return serializedLength;
+    getSerializedLength(): Result<number, string> {
+      return Ok(serializedLength);
     }
   };
   return SerializableScalarWrapperClass;

@@ -1,3 +1,4 @@
+import { Result } from 'ts-results';
 import {DeserializeOptions, SerializeOptions} from './serializable';
 import {getJsonFieldSettings} from './serializable-objects-internal';
 import {SerializableWrapper} from './serializable-wrapper';
@@ -67,7 +68,7 @@ export abstract class SBitmask extends SerializableWrapper<number> {
 
   set value(newValue: number) {
     const bitfields = getSBitfieldSpecs(this);
-    validateLength(bitfields, new this.wrapperType().getSerializedLength());
+    validateLength(bitfields, new this.wrapperType().getSerializedLength().unwrap());
 
     let offset = 0;
     for (let i = bitfields.length - 1; i >= 0; --i) {
@@ -84,20 +85,20 @@ export abstract class SBitmask extends SerializableWrapper<number> {
     }
   }
 
-  deserialize(buffer: Buffer, opts?: DeserializeOptions): number {
+  deserialize(buffer: Buffer, opts?: DeserializeOptions): Result<number, string> {
     const wrapper = new this.wrapperType();
     const readOffset = wrapper.deserialize(buffer, opts);
     this.value = wrapper.value;
     return readOffset;
   }
 
-  serialize(opts?: SerializeOptions): Buffer {
+  serialize(opts?: SerializeOptions): Result<Buffer, string> {
     const wrapper = new this.wrapperType();
     wrapper.value = this.value;
     return wrapper.serialize(opts);
   }
 
-  getSerializedLength(opts?: SerializeOptions): number {
+  getSerializedLength(opts?: SerializeOptions): Result<number, string> {
     const wrapper = new this.wrapperType();
     return wrapper.getSerializedLength(opts);
   }
