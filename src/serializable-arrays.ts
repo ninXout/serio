@@ -39,7 +39,7 @@ export class SArray<ValueT extends Serializable> extends SerializableWrapper<
   serialize(opts?: SerializeOptions): Result<Buffer, string> {
     const map = mapSArray(this, (element) => element.serialize(opts))
     if (map.err) return Err(map.val)
-    return Ok(Buffer.concat(map.val));
+    return Ok(Buffer.concat(map.unwrap()));
   }
 
   getSerializedLength(opts?: SerializeOptions): Result<number, string> {
@@ -52,7 +52,9 @@ export class SArray<ValueT extends Serializable> extends SerializableWrapper<
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   toJSON(): any {
-    return mapSArray(this, toJSON);
+    return mapSArray(this, (element, index) => {
+      return Ok(toJSON(element))
+    });
   }
 
   /** Assigns elements from a JSON array.
@@ -336,7 +338,9 @@ export class SVector<ValueT extends Serializable> extends SerializableWrapper<
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   toJSON(): any {
-    return mapSVector(this, toJSON);
+    return mapSVector(this, (element, index) => {
+      return Ok(toJSON(element))
+    });
   }
 
   /** Assigns elements from a JSON array.
