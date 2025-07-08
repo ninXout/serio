@@ -37,14 +37,14 @@ export class SArray<ValueT extends Serializable> extends SerializableWrapper<
   }
 
   serialize(opts?: SerializeOptions): Result<Buffer, string> {
-    const map = mapSArray(this, (element) => element.serialize(opts))
+    const map = mapSArray(this, (element) => element.serialize(opts).unwrap())
     if (map.err) return Err(map.val)
     return Ok(Buffer.concat(map.unwrap()));
   }
 
   getSerializedLength(opts?: SerializeOptions): Result<number, string> {
     const map = mapSArray(this, (element) =>
-      element.getSerializedLength(opts)
+      element.getSerializedLength(opts).unwrap()
     )
     if (map.err) return Err(map.val)
     return Ok(map.val.reduce((a, b) => a + b, 0));
@@ -52,9 +52,9 @@ export class SArray<ValueT extends Serializable> extends SerializableWrapper<
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   toJSON(): any {
-    return mapSArray(this, (element, index) => {
-      return Ok(toJSON(element))
-    });
+    const map = mapSArray(this, toJSON)
+    if (map.err) throw new Error(map.val)
+    return map.val;
   }
 
   /** Assigns elements from a JSON array.
@@ -158,7 +158,7 @@ export class SArray<ValueT extends Serializable> extends SerializableWrapper<
  */
 function mapSArray<ValueT extends Serializable, ResultT>(
   sarray: SArray<ValueT>,
-  fn: (element: ValueT, index: number) => Result<ResultT, string>
+  fn: (element: ValueT, index: number) => ResultT
 ): Result<Array<ResultT>, string> {
   let elements: Array<ValueT>;
   if (sarray.length !== undefined && sarray.value.length < sarray.length) {
@@ -338,9 +338,11 @@ export class SVector<ValueT extends Serializable> extends SerializableWrapper<
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   toJSON(): any {
-    return mapSVector(this, (element, index) => {
+    const map = mapSVector(this, (element, index) => {
       return Ok(toJSON(element))
-    });
+    })
+    if (map.err) throw new Error(map.val)
+    return map.val;
   }
 
   /** Assigns elements from a JSON array.

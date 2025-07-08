@@ -42,7 +42,7 @@ export abstract class Serializable {
     opts?: DeserializeOptions
   ): T {
     const instance = new this();
-    instance.deserialize(buffer, opts);
+    instance.deserialize(buffer, opts).unwrap();
     return instance;
   }
 }
