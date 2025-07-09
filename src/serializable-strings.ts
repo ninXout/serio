@@ -25,7 +25,7 @@ export class SString extends SerializableWrapper<string> {
   }
 
   getSerializedLength(opts?: SerializeOptions) {
-    return Ok(encodeString(this.value, opts).length);
+    return Ok(2 + encodeString(this.value, opts).length);
   }
 }
 

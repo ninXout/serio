@@ -27,7 +27,7 @@ describe('SArray', function () {
     expect(arr1.serialize().unwrap()).toStrictEqual(Buffer.alloc(0));
 
     arr1.value = [SString.of('hello'), SInt8.of(10), SInt8.of(20)];
-    expect(arr1.getSerializedLength().unwrap()).toStrictEqual(7);
+    expect(arr1.getSerializedLength().unwrap()).toStrictEqual(9);
 
     const arr2 = SArray.of([new SString(), new SInt8(), new SInt8()]);
     arr2.deserialize(arr1.serialize().unwrap());
