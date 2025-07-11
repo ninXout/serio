@@ -4,10 +4,197 @@ import {
   Serializable,
   SerializeOptions,
 } from './serializable';
-import {SerializableWrapper} from './serializable-wrapper';
+import {SerializableWrapper, SerializableWrapper2} from './serializable-wrapper';
 import {canAssignJSON, toJSON} from './utils';
 import { SUInt16LE } from './serializable-scalars';
 import { Ok, Err, Result } from 'ts-results';
+
+/** A Serializable that represents a concatenation of other Serializables. */
+export class SPair<ValueK extends Serializable, ValueV extends Serializable> extends SerializableWrapper2<
+  ValueK, ValueV
+> {
+  /** Array of Serializables. */
+  value: [ValueK, ValueV] = [null as any, null as any];
+  /** Element constructor in fixed size SPairs.
+   *
+   * Will only be present if length !== undefined. */
+  readonly elementType?: new () => [ValueK, ValueV];
+
+  deserialize(buffer: Buffer, opts?: DeserializeOptions): Result<number, string> {
+    let offset = 0;
+    const deserk = this.value[0].deserialize(buffer.subarray(offset), opts);
+    if (deserk.err) return Err(deserk.val)
+    offset += deserk.unwrap();
+    const deserv = this.value[1].deserialize(buffer.subarray(offset), opts);
+    if (deserv.err) return Err(deserv.val)
+    offset += deserv.unwrap();
+    return Ok(offset);
+  }
+
+  serialize(opts?: SerializeOptions): Result<Buffer, string> {
+    const resk = this.value[0].serialize(opts);
+    if (resk.err) return Err(resk.val)
+    const resv = this.value[1].serialize(opts);
+    if (resv.err) return Err(resv.val)
+    return Ok(Buffer.concat([resk.unwrap(), resv.unwrap()]))
+  }
+
+  getSerializedLength(opts?: SerializeOptions): Result<number, string> {
+    return Ok(this.value[0].getSerializedLength(opts).unwrap() + this.value[1].getSerializedLength(opts).unwrap())
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  toJSON(): any {
+    return toJSON(this.value);
+  }
+
+  /** Assigns elements from a JSON array.
+   *
+   * Conceptually equivalent to assigning to this.values directly, but
+   * recursively hydrates SObjects / SPairs / SerializableWrappers etc and
+   * invokes their assignJSON() to process JSON values.
+   */
+  assignJSON(jsonValue: unknown): Result<void, string> {
+    if (!canAssignJSON(this.value[0])) return Err(`${this.value[0].constructor.name} does not support assignJSON`)
+    if (!canAssignJSON(this.value[1])) return Err(`${this.value[1].constructor.name} does not support assignJSON`)
+
+    this.value[0].assignJSON(jsonValue as any[0]);
+    this.value[1].assignJSON(jsonValue as any[1]);
+
+    return Ok.EMPTY
+  }
+
+  /** Create a new instance of this wrapper class from a raw value. */
+  static of<ValueK extends Serializable, ValueV extends Serializable, SPairT extends SPair<ValueK, ValueV>>(
+    key: ValueK,
+    value: ValueV
+  ): SPairT;
+
+  /** Create a new instance of this wrapper class from a raw [key, value] tuple. */
+  static of<ValueK extends Serializable, ValueV extends Serializable, SPairT extends SPair<ValueK, ValueV>>(
+    value: [ValueK, ValueV],
+    arg?: any
+  ): SPairT;
+
+  /** Returns an SPairWithWrapper class that wraps elements with the provided
+   * SerializableWrapper. */
+  static of<ValueK, ValueV>(
+    keyType: new () => SerializableWrapper<ValueK>,
+    valType: new () => SerializableWrapper<ValueV>
+  ): ReturnType<typeof createSPairWithWrapperClass<ValueK, ValueV>>;
+
+  static of<ValueK, ValueV>(
+    arg1: ValueK | [ValueK, ValueV] | (new () => SerializableWrapper<ValueK>),
+    arg2: ValueV | (new () => SerializableWrapper<ValueV>)
+  ) {
+    // Handle SPair.of([key, value])
+    if (Array.isArray(arg1)) {
+      return super.of(arg1[0], arg1[1]);
+    }
+
+    // Handle SPair.of(key, value)
+    if (typeof arg1 !== 'function' && typeof arg2 !== 'function') {
+      return super.of(arg1, arg2);
+    }
+
+    // Handle SPair.of(keyTypeCtor, valTypeCtor)
+    if (
+      typeof arg1 === 'function' &&
+      arg1.prototype instanceof SerializableWrapper
+    ) {
+      return createSPairWithWrapperClass<ValueK, ValueV>(
+        arg1 as any,
+        arg2 as any
+      );
+    }
+
+    throw new Error(
+      'SPair.of() should be invoked either with a [key, value] tuple, ' +
+        'two Serializable values, or two SerializableWrapper constructors'
+    );
+  }
+
+}
+
+/** Returns an SPairWithWrapperClass child class with the given parameters. */
+function createSPairWithWrapperClass<ValueK, ValueV>(
+  keyType: new () => SerializableWrapper<ValueK>,
+  valType: new () => SerializableWrapper<ValueV>
+) {
+  return class extends SPairWithWrapper<ValueK, ValueV> {
+    value = [new keyType().value, new valType().value] as [ValueK, ValueV];
+    keyType = keyType;
+    valType = valType;
+  };
+}
+
+/** SPair variant that wraps each element for serialization / deserialization.
+ */
+export abstract class SPairWithWrapper<ValueK, ValueV> extends SerializableWrapper2<
+  ValueK, ValueV
+> {
+  /** Array of unwrapped values. */
+  value: [ValueK, ValueV] = [null as any, null as any];
+  /** Wrapper type constructor. */
+  abstract readonly keyType: new () => SerializableWrapper<ValueK>;
+  abstract readonly valType: new () => SerializableWrapper<ValueV>;
+
+  deserialize(buffer: Buffer, opts?: DeserializeOptions): Result<number, string> {
+    const array = this.toSPair();
+    const readOffset = array.deserialize(buffer, opts);
+    this.value.splice(
+      0,
+      this.value.length,
+      ...array.value.map(({value}) => value)
+    );
+    return readOffset
+  }
+
+  serialize(opts?: SerializeOptions): Result<Buffer, string> {
+    return this.toSPair().serialize(opts)
+  }
+
+  getSerializedLength(opts?: SerializeOptions): Result<number, string> {
+    return this.toSPair().getSerializedLength(opts);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  toJSON(): any {
+    return this.toSPair().toJSON();
+  }
+
+  /** Assigns elements from a JSON array.
+   *
+   * JSON values are processed with wrapperType.assignJSON().
+   */
+  assignJSON(jsonValue: unknown) {
+    const array = this.toSPair();
+    array.assignJSON(jsonValue);
+    this.value.splice(
+      0,
+      this.value.length,
+      ...array.value.map(({value}) => value)
+    );
+  }
+
+  /**  Constructs an SPair of wrappers around the current array of elements. */
+  toSPair() {
+    const thing: [SerializableWrapper<ValueK>, SerializableWrapper<ValueV>] = [new this.keyType(), new this.valType()]
+    thing[0].value = this.value[0]
+    thing[1].value = this.value[1]
+    return SPair.of(thing[0], thing[1]);
+  }
+
+  /** Create a new instance of this wrapper class from a raw value. */
+  static ofJSON<ValueK, ValueV, SPairT extends SPairWithWrapper<ValueK, ValueV>>(
+    this: new () => SPairT,
+    jsonValues: [unknown, unknown]
+  ): SPairT {
+    const instance = new this();
+    instance.assignJSON(jsonValues);
+    return instance;
+  }
+}
 
 /** A Serializable that represents a concatenation of other Serializables. */
 export class SMap<ValueK extends Serializable, ValueV extends Serializable> extends SerializableWrapper<

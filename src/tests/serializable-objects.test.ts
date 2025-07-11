@@ -1,7 +1,9 @@
 import {
   field,
   json,
+  SArray,
   SObject,
+  SPair,
   SString,
   SUInt16BE,
   SUInt8,

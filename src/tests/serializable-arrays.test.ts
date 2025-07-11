@@ -4,6 +4,7 @@ import {
   SInt16LE,
   SInt8,
   SObject,
+  SPair,
   SString,
   SUInt16BE,
   SUInt8,
@@ -110,6 +111,9 @@ describe('SArrayWithWrapper', function () {
   test('serialize and deserialize', function () {
     const arr1 = SArray.of(SUInt16BE).of([100, 200, 300]);
     expect(arr1.getSerializedLength().unwrap()).toStrictEqual(6);
+
+    const arr8 = SArray.of(SPair.of(SUInt16BE, SUInt16BE)).of([[10, 10], [10, 10]]);
+    expect(arr8.getSerializedLength().unwrap()).toStrictEqual(8);
 
     const arr2 = SArray.of(times(3, () => SUInt16BE.of(0)));
     arr2.deserialize(arr1.serialize().unwrap());
