@@ -385,13 +385,14 @@ export class SVector<ValueT extends Serializable> extends SerializableWrapper<
 
   /** Create a new instance of this wrapper class from a raw value. */
   static of<ValueT extends Serializable, SVectorT extends SVector<ValueT>>(
+    this: new () => SVectorT,
     value: Array<ValueT>
   ): SVectorT;
   /** Returns an SVectorWithWrapper class that wraps elements with the provided
    * SerializableWrapper. */
   static of<ValueT>(
     wrapperType: new () => SerializableWrapper<ValueT>
-  ): SVectorWithWrapper<ValueT>;
+  ): ReturnType<typeof createSVectorWithWrapperClass<ValueT>>;
   static of<ValueT>(
     arg: Array<ValueT> | (new () => SerializableWrapper<ValueT>)
   ) {
@@ -402,13 +403,25 @@ export class SVector<ValueT extends Serializable> extends SerializableWrapper<
       typeof arg === 'function' &&
       arg.prototype instanceof SerializableWrapper
     ) {
-      return SVectorWithWrapper<ValueT>;
+      return createSVectorWithWrapperClass<ValueT>(arg);
     }
     throw new Error(
       'SVector.of() should be invoked either with an array of Serializable ' +
         'values or a SerializableWrapper constructor'
     );
   }
+}
+
+/** Returns an SVectorWithWrapperClass child class with the given parameters. */
+function createSVectorWithWrapperClass<ValueT>(
+  wrapperType: new () => SerializableWrapper<ValueT>
+) {
+  return class extends SVectorWithWrapper<ValueT> {
+    value = Array(0)
+      .fill(0)
+      .map(() => new wrapperType().value);
+    wrapperType = wrapperType;
+  };
 }
 
 /** Applys the provided function over the elements of an SVector, subject to
