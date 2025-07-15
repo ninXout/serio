@@ -304,13 +304,10 @@ export class SVector<ValueT extends Serializable> extends SerializableWrapper<
   deserialize(buffer: Buffer, opts?: DeserializeOptions): Result<number, string> {
     let offset = 2;
     const map = mapSVector(this, (element, index) => {
-      const deser = element.deserialize(buffer.subarray(offset), opts);
-      if (deser.err) return Err(deser.val)
-      offset += deser.unwrap();
+      offset += element.deserialize(buffer.subarray(offset), opts).unwrap();
       if (index >= this.value.length) {
         this.value.push(element);
       }
-      return Ok.EMPTY
     });
     if (map.err) return Err(map.val)
     return Ok(offset);
@@ -319,18 +316,14 @@ export class SVector<ValueT extends Serializable> extends SerializableWrapper<
   serialize(opts?: SerializeOptions): Result<Buffer, string> {
     const lengthBuf = Buffer.alloc(2); // i dont think this alloc has to happen but maybe it does idk
     lengthBuf.writeUint16LE(this.value.length);
-    const val = mapSVector(this, (element) => {
-      const res = element.serialize(opts);
-      if (res.err) return Err(res.unwrap())
-      return Ok(res.unwrap())
-    })
+    const val = mapSVector(this, (element) => element.serialize(opts).unwrap())
     if (val.err) return Err(val.val)
     return Ok(Buffer.concat([ lengthBuf, ...val.unwrap() ]));
   }
 
   getSerializedLength(opts?: SerializeOptions): Result<number, string> {
     const map = mapSVector(this, (element) =>
-      element.getSerializedLength(opts)
+      element.getSerializedLength(opts).unwrap()
     );
     if (map.err) return Err(map.val)
     return Ok(map.unwrap().reduce((a, b) => a + b, 0))
@@ -432,7 +425,7 @@ function createSVectorWithWrapperClass<ValueT>(
  */
 function mapSVector<ValueT extends Serializable, ResultT>(
   SVector: SVector<ValueT>,
-  fn: (element: ValueT, index: number) => Result<ResultT, string>
+  fn: (element: ValueT, index: number) => ResultT
 ): Result<Array<ResultT>, string> {
   const elements: Array<ValueT> = SVector.value;
   const res = elements.map((element, index) => {
